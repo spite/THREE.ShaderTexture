@@ -329,77 +329,36 @@ void main(void) {
 }
 </script>
 
-<script type="x-shader/x-fragment" id="tiles-fs" >
+<script id="fast-blur-fs" type="x-shader/x-fragment">
 precision highp float;
 
+uniform sampler2D tInputMap;
 uniform vec2 dimensions;
-uniform float seed;
+uniform vec2 delta;
 
 varying vec2 vUv;
 
-// a variant from jt's https://www.shadertoy.com/view/4st3R7
-// beside code golfing, main difference is s + S
+vec4 blur( sampler2D image, vec2 uv, vec2 resolution, vec2 direction ) {
 
-float hash( float n ) { return fract(sin(n)*753.5453123); }
-float noise( in vec3 x )
-{
-	vec3 p = floor(x);
-	vec3 f = fract(x);
-	f = f*f*(3.0-2.0*f);
+	vec4 color = vec4(0.0);
+	vec2 inc = direction / resolution;
+	vec2 tUv = uv + .5 / resolution;
+	color += texture2D( image, ( tUv - inc * 4. ) ) * 0.051;
+	color += texture2D( image, ( tUv - inc * 3. ) ) * 0.0918;
+	color += texture2D( image, ( tUv - inc * 2. ) ) * 0.12245;
+	color += texture2D( image, ( tUv - inc * 1. ) ) * 0.1531;
+	color += texture2D( image, ( tUv + inc * 0. ) ) * 0.1633;
+	color += texture2D( image, ( tUv + inc * 1. ) ) * 0.1531;
+	color += texture2D( image, ( tUv + inc * 2. ) ) * 0.12245;
+	color += texture2D( image, ( tUv + inc * 3. ) ) * 0.0918;
+	color += texture2D( image, ( tUv + inc * 4. ) ) * 0.051;
+	return color;
 
-	float n = p.x + p.y*157.0 + 113.0*p.z;
-	return mix(mix(mix( hash(n+  0.0), hash(n+  1.0),f.x),
-	               mix( hash(n+157.0), hash(n+158.0),f.x),f.y),
-	mix(mix( hash(n+113.0), hash(n+114.0),f.x),
-	    mix( hash(n+270.0), hash(n+271.0),f.x),f.y),f.z);
-}
-#define mirror(v) abs(2. * fract(v / 2.) - 1.)
-
-float rnd(vec2 co){
-    return fract(sin(dot(co.xy + seed,vec2(12.9898,78.233))) * 43758.5453);
-    //return noise( vec3( s, seed ) );
-    //texture2D(iChannel0, seed + seed*0.001).x;
 }
 
-float len(vec2 v)
-{
-    float w = 1.25/(.25+mirror(seed*.125));
-    return pow(dot(pow(v, vec2(w)), vec2(1)), 1./w);
-}
+void main() {
 
-float flip(vec2 v, float w)
-{
-    v = fract(v / 2.) - .5;
-    return mix(w, 1. - w, step(0., v.x * v.y));
-}
-
-float tile(vec2 v)
-{
-    v = fract(v);
-    return smoothstep(.0,.05, abs(len(v)-.5)) * smoothstep(.0,.05, abs(len(1.-v)-.5));
-}
-
-float tile_full(vec2 v)
-{
-    v = fract(v);
-    return smoothstep(.45,.55, len(v)) * smoothstep(.45,.55, len(1.-v));
-}
-
-float pattern(vec2 v)
-{
-    vec2 id = floor(v);
-    return mix(
-        flip(v, rnd(id / 128.) < .5 ? 1.-tile_full(v) : tile_full(vec2(1.-v.x,v.y))),
-        1.-(rnd(id / 128.) < .5 ? tile(v) : tile(vec2(1.-v.x,v.y))),
-        mirror(seed*.01));
-}
-
-void main()
-{
-	vec2 I = vUv;
-    float p = 1.-pattern(I*10.);
-    gl_FragColor = vec4(p);
-    gl_FragColor.rgb *= smoothstep( .45, .55, p ) * vec3( 255., 166., 50. ) / 255.;
+	gl_FragColor = blur( tInputMap, vUv, dimensions, delta );
 
 }
 
@@ -508,7 +467,7 @@ void main() {
 	float gamma = 1.2;
 	color.rgb = pow(color.rgb, vec3(1.0/gamma));
 
-    gl_FragColor = color;
+	gl_FragColor = color;
 
 
 }
@@ -524,7 +483,7 @@ var container, renderer, camera, controls, scene;
 var torus, textures;
 var mobile = false;//isMobile.any;
 
-var baseFBO, blurFBO;
+var baseFBO, blurFBO, blur2FBO;
 var blurShader, finalShader;
 var orthoQuad, orthoCamera, orthoScene;
 var resolution = new THREE.Vector2();
@@ -586,6 +545,7 @@ function initScene() {
 
 	baseFBO = createRenderTarget();
 	blurFBO = createRenderTarget();
+	blur2FBO = createRenderTarget();
 
 	var light = new THREE.AmbientLight( 0x101010 );
 	scene.add( light );
@@ -639,16 +599,16 @@ function initScene() {
 		uniforms: {
 			tInputMap: { type: 't', value: baseFBO.texture },
 			dimensions: { type: 'v2', value: resolution },
-			sigma: { type: 'f', value: 10 }
+			delta: { type: 'v2', value: new THREE.Vector2( 2, 0 ) }
 		},
 		vertexShader: document.getElementById('ortho-vs').textContent,
-		fragmentShader: document.getElementById('blur-fs').textContent,
+		fragmentShader: document.getElementById('fast-blur-fs').textContent,
 	} );
 
 	finalShader = new THREE.RawShaderMaterial( {
 		uniforms: {
 			inputTexture: { type: 't', value: baseFBO.texture },
-			blurTexture: { type: 't', value: blurFBO.texture },
+			blurTexture: { type: 't', value: blur2FBO.texture },
 			resolution: { type: 'v2', value: resolution },
 			devicePixelRatio: { type: 'f', value: 0 },
 			boost: { type: 'f', value: 1.1 },
@@ -817,6 +777,7 @@ function onWindowResized( event ) {
 	baseFBO.setSize( w * dPR, h * dPR );
 	var s = .25;
 	blurFBO.setSize( s * w * dPR, s * h * dPR );
+	blur2FBO.setSize( s * w * dPR, s * h * dPR );
 
 	orthoQuad.scale.set( w, h, 1 );
 
@@ -845,9 +806,15 @@ function animate() {
 	var dPR = renderer.getPixelRatio();
 	var s = .25;
 
+	var radius = 2;
 	orthoQuad.material = blurShader;
-	blurShader.uniforms.dimensions.value.set( s * w * dPR, s * h * dPR )
+	blurShader.uniforms.tInputMap.value = baseFBO.texture;
+	blurShader.uniforms.dimensions.value.set( s * w * dPR, s * h * dPR );
+	blurShader.uniforms.delta.value.set( radius, 0 );
 	renderer.render( orthoScene, orthoCamera, blurFBO );
+	blurShader.uniforms.tInputMap.value = blurFBO.texture;
+	blurShader.uniforms.delta.value.set( 0, radius );
+	renderer.render( orthoScene, orthoCamera, blur2FBO );
 
 	orthoQuad.material = finalShader;
 	finalShader.uniforms.resolution.value.set( w * dPR, h * dPR );
