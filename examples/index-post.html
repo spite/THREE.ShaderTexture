@@ -323,7 +323,7 @@ vec4 blur( sampler2D image, vec2 uv, vec2 resolution, vec2 direction ) {
 
 	vec4 color = vec4(0.0);
 	vec2 inc = direction / resolution;
-	vec2 tUv = uv + .5 / resolution;
+	vec2 tUv = uv;
 	color += texture2D( image, ( tUv - inc * 4. ) ) * 0.051;
 	color += texture2D( image, ( tUv - inc * 3. ) ) * 0.0918;
 	color += texture2D( image, ( tUv - inc * 2. ) ) * 0.12245;
@@ -351,6 +351,7 @@ precision highp float;
 uniform sampler2D inputTexture;
 uniform sampler2D blurTexture;
 uniform vec2 resolution;
+uniform float glow;
 uniform float time;
 uniform float devicePixelRatio;
 uniform float boost;
@@ -429,7 +430,7 @@ void main() {
     vec4 base = vec4( FxaaPixelShader( aauv, inputTexture, res ), 1. );
 
     vec4 blur = texture2D( blurTexture, vUv );
-    vec4 color = 1. - ( 1. - base ) * ( 1. - blur );
+    vec4 color = 1. - ( 1. - base ) * ( 1. - blur * glow );
     color = clamp( color, vec4( 0. ), vec4( 1. ) );
 
     vec2 position = ( gl_FragCoord.xy / resolution ) - .5;
@@ -575,7 +576,7 @@ function initScene() {
 		bumpMap: textures.bumpTexture,
 		bumpScale: .1,
 		normalMap: textures.normalTexture,
-		normalScale: new THREE.Vector2(.1,.1),
+		normalScale: new THREE.Vector2(.1,.1)
 	})
 
 	torus = new THREE.Mesh(
@@ -603,6 +604,7 @@ function initScene() {
 		uniforms: {
 			inputTexture: { type: 't', value: baseFBO.texture },
 			blurTexture: { type: 't', value: blur2FBO.texture },
+			glow: { type: 'f', value: 1 },
 			resolution: { type: 'v2', value: resolution },
 			devicePixelRatio: { type: 'f', value: 0 },
 			boost: { type: 'f', value: 1.1 },
