@@ -1,6 +1,10 @@
 # THREE.ShaderTexture
 ShaderTexture, a helper to use procedurally generated texture
 
+#### Demos ####
+- **[Procedural textures on a torus knot](https://spite.github.io/THREE.ShaderTexture/examples/index.html)**: every map of the material is drawn by a shader, drag on a texture to change it
+- **[The same with a glow pass](https://spite.github.io/THREE.ShaderTexture/examples/index-post.html)**: adds a glow texture and postprocessing
+
 #### 2026 update ####
 **Disclaimer:** this library is from 2016. three.js still has no texture driven by a GLSL shader for `WebGLRenderer`, so the library is still useful there. With `WebGPURenderer` and TSL there's one since r167 (2024), `rtt()`, which takes a node instead of a shader and updates itself
 ```js
@@ -27,8 +31,6 @@ The library has been rewritten for current three.js. What changed from the 2016 
 - the texture has mipmaps again, three.js stopped generating them for render targets by default
 - a fifth argument takes render target options, and there are ```setSize()``` and ```dispose()```
 - the examples load three.js from a CDN, turn color management off to keep the look they had in 2016, and show every texture next to the knot. The textures tile now, and the band of broken normals along the knot is gone
-
-Demos: [procedural textures on a torus knot](https://spite.github.io/THREE.ShaderTexture/examples/index.html) and [the same with a glow pass](https://spite.github.io/THREE.ShaderTexture/examples/index-post.html)
 
 #### How to use ####
 Import three.js and the module in your project:
