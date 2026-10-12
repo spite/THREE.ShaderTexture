@@ -1,0 +1,35 @@
+{
+  "name": "three.shader-texture",
+  "version": "1.0.0",
+  "description": "A three.js texture drawn by a shader into a render target",
+  "type": "module",
+  "main": "src/THREE.ShaderTexture.js",
+  "exports": "./src/THREE.ShaderTexture.js",
+  "files": [
+    "src"
+  ],
+  "directories": {
+    "example": "examples"
+  },
+  "peerDependencies": {
+    "three": ">=0.152.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spite/THREE.ShaderTexture.git"
+  },
+  "keywords": [
+    "three.js",
+    "shader",
+    "texture",
+    "procedural",
+    "render target",
+    "webgl"
+  ],
+  "author": "Jaume Sanchez <the.spite@gmail.com> (https://www.clicktorelease.com)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/spite/THREE.ShaderTexture/issues"
+  },
+  "homepage": "https://github.com/spite/THREE.ShaderTexture#readme"
+}

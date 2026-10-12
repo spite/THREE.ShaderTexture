@@ -33,11 +33,17 @@ The library has been rewritten for current three.js. What changed from the 2016 
 - the examples load three.js from a CDN, turn color management off to keep the look they had in 2016, and show every texture next to the knot. The textures tile now, and the band of broken normals along the knot is gone
 
 #### How to use ####
-Import three.js and the module in your project:
+Use npm to install it, alongside three.js
+```
+npm i three three.shader-texture
+```
+and import it in your code
 ```js
 import * as THREE from 'three';
-import { ShaderTexture } from './src/THREE.ShaderTexture.js';
+import { ShaderTexture } from 'three.shader-texture';
 ```
+It's a plain ES module, so it also works without a bundler as long as an import map resolves `three` (see [examples/index.html](examples/index.html)).
+
 Create a material with the shader that draws the texture, and a `ShaderTexture` with it:
 ```js
 const shader = new THREE.ShaderMaterial( {
