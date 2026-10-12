@@ -1,23 +1,66 @@
-function ShaderTexture( renderer, shader, width, height ) {
+import {
+	LinearFilter,
+	LinearMipmapLinearFilter,
+	Mesh,
+	OrthographicCamera,
+	PlaneGeometry,
+	RepeatWrapping,
+	Scene,
+	WebGLRenderTarget
+} from 'three';
 
-	this.renderer = renderer;
-	this.shader = shader;
-	this.orthoScene = new THREE.Scene();
-	this.fbo = new THREE.WebGLRenderTarget( width, height, {
-		wrapS: THREE.RepeatWrapping,
-		wrapT: THREE.RepeatWrapping,
-		minFilter: THREE.LinearMipMapLinearFilter,
-		magFilter: THREE.LinearFilter
-	} );
-	this.orthoCamera = new THREE.OrthographicCamera( width / - 2, width / 2, height / 2, height / - 2, .00001, 1000 );
-	this.orthoQuad = new THREE.Mesh( new THREE.PlaneBufferGeometry( width, height ), this.shader );
-	this.orthoScene.add( this.orthoQuad );
-	this.texture = this.fbo.texture;
+class ShaderTexture {
+
+	constructor( renderer, shader, width, height, options = {} ) {
+
+		this.renderer = renderer;
+		this.shader = shader;
+
+		this.fbo = new WebGLRenderTarget( width, height, {
+			wrapS: RepeatWrapping,
+			wrapT: RepeatWrapping,
+			minFilter: LinearMipmapLinearFilter,
+			magFilter: LinearFilter,
+			generateMipmaps: true,
+			depthBuffer: false,
+			...options
+		} );
+
+		this.orthoScene = new Scene();
+		this.orthoCamera = new OrthographicCamera( - 1, 1, 1, - 1, - 1, 1 );
+		this.orthoQuad = new Mesh( new PlaneGeometry( 2, 2 ), this.shader );
+		this.orthoScene.add( this.orthoQuad );
+
+		this.texture = this.fbo.texture;
+
+	}
+
+	render() {
+
+		const renderer = this.renderer;
+		const renderTarget = renderer.getRenderTarget();
+		const cubeFace = renderer.getActiveCubeFace();
+		const mipmapLevel = renderer.getActiveMipmapLevel();
+
+		renderer.setRenderTarget( this.fbo );
+		renderer.render( this.orthoScene, this.orthoCamera );
+		renderer.setRenderTarget( renderTarget, cubeFace, mipmapLevel );
+
+	}
+
+	setSize( width, height ) {
+
+		this.fbo.setSize( width, height );
+
+	}
+
+	dispose() {
+
+		this.fbo.dispose();
+		this.orthoQuad.geometry.dispose();
+
+	}
 
 }
 
-ShaderTexture.prototype.render = function() {
-
-	this.renderer.render( this.orthoScene, this.orthoCamera, this.fbo );
-
-}
+export { ShaderTexture };

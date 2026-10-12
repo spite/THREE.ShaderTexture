@@ -33,6 +33,46 @@ body {
 	font-weight: 100;
 	text-shadow: 0 1px 0 rgba(0,0,0,1);
 }
+#info {
+	position: absolute;
+	left: 12px;
+	top: 12px;
+	z-index: 1;
+	max-width: 420px;
+	font-weight: 700;
+}
+#info b {
+	font-family: 'Playfair Display', serif;
+	font-size: 22px;
+	line-height: 1.6em;
+}
+.preview {
+	position: absolute;
+	bottom: 12px;
+	width: 128px;
+	height: 128px;
+	z-index: 1;
+	cursor: crosshair;
+	touch-action: none;
+	overflow: hidden;
+}
+.preview div {
+	position: absolute;
+	width: 9px;
+	height: 9px;
+	margin: -5px 0 0 -5px;
+	border: 1px solid #ffffff;
+	border-radius: 50%;
+	box-shadow: 0 0 0 1px #000000;
+	pointer-events: none;
+}
+.label {
+	position: absolute;
+	bottom: 144px;
+	width: 128px;
+	z-index: 1;
+	font-weight: 700;
+}
 #container {
 	position: absolute;
 	left: 0;
@@ -48,10 +88,16 @@ body {
 	<body>
 
 		<div id="container"></div>
+		<div id="info"><b>ShaderTexture</b><br>Each texture below is drawn by a fragment shader into a render target, on every frame. Nothing is loaded from an image. The knot uses them as its maps.<br>Click and drag on a texture to change its shader.</div>
 
-		<script src="js/three.js"></script>
-		<script src="js/OrbitControls.js"></script>
-		<script src="../src/THREE.ShaderTexture.js"></script>
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+					"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+				}
+			}
+		</script>
 
 <script type="x-shader/x-vertex" id="ortho-vs" >
 precision highp float;
@@ -76,15 +122,22 @@ void main() {
 precision highp float;
 
 uniform float type;
+uniform float time;
+uniform vec2 params;
 
 varying vec2 vUv;
+
+// the stripes and the noise repeat exactly once over the texture, so it tiles
+#define STRIPES 9.42477796
+float period = 101.;
+float frequency = 1.;
 
 #define EPS vec2(1e-3, 0.0)
 #define ON vec2(1.0, 0.0)
 
 float N(vec2 p)
 {
-	p = mod(p, vec2(101.0));
+	p = mod(p, vec2(period));
 	return fract(sin(p.x * 41784.0) + sin(p.y * 32424.0));
 }
 
@@ -110,6 +163,7 @@ float fbm3(vec3 p)
 	for(int i = 1; i <= 7; ++i)
 	{
 		x = exp2(float(i));
+		period = 4. * x * frequency;
 		f += (smN3(p * x) - 0.5) / x;
 	}
 	return f;
@@ -124,8 +178,9 @@ float random(vec2 n, float offset ){
 
 vec3 bump(vec2 p)
 {
-	float c = .5 + .5 * fbm2(p);
-	float s = .5 + .5 * sin( 10. * p.y );
+	frequency = 1. + floor( 4. * params.x );
+	float c = .5 + 2. * params.y * fbm2(p * frequency);
+	float s = .5 + .5 * sin( STRIPES * p.y );
 	c *= .45 + .55 * s;
 	c += .01 * random(p,.234243);
     return vec3(c);
@@ -134,24 +189,28 @@ vec3 bump(vec2 p)
 vec3 diffuse(vec2 p)
 {
     float c = .5;
-    float s = .5 + .5 * sin( 10. * p.y );
-	s = smoothstep( .35, .65, s );
+    float s = .5 + .5 * sin( STRIPES * p.y );
+	float soft = mix( .01, .5, params.y );
+	s = smoothstep( .5 - soft, .5 + soft, s );
 	c *= .25 + .75 * s;
 	c += .01 * random(p,.45673);
 	float r = 1. - smoothstep(.25,.75,c);
 	float g = smoothstep(.25,.75,c);
-    return vec3(r,.5 * g + .5 * r,g);
+	vec3 color = vec3(r,.5 * g + .5 * r,g);
+	float angle = 6.2831853 * ( params.x - .5 );
+	vec3 axis = vec3( .57735 );
+	return color * cos( angle ) + cross( axis, color ) * sin( angle ) + axis * dot( axis, color ) * ( 1. - cos( angle ) );
 
 }
 
 vec3 roughness(vec2 p)
 {
 	float c = .5;
-	float s = .5 + .5 * sin( 10. * p.y );
+	float s = .5 + .5 * sin( STRIPES * p.y );
 	s = smoothstep( .35, .65, s );
 	c *= .25 + .75 * s;
 	c *= .01 * random(p,.7556);
-	return vec3(1.-c);
+	return vec3( clamp( params.x + 2. * ( params.y - .5 ) * ( s - .5 ) - c, 0., 1. ) );
 
 }
 
@@ -159,6 +218,7 @@ void main()
 {
 	float r = 4.;
 	vec2 uv = vUv;
+	uv.y += time;
 
 	if( type == 0. ){
 		gl_FragColor = vec4(diffuse(r*uv),1.0);
@@ -266,7 +326,6 @@ void main() {
 // from http://cpetry.github.io/NormalMap-Online/
 precision highp float;
 precision highp int;
-#define SHADER_NAME HeightMapToNormalMap
 
 varying vec2 vUv;
 
@@ -290,22 +349,6 @@ void main(void) {
 	vec2 trv = vec2(vUv.x + step.x, vUv.y + step.y );
 	vec2 rv  = vec2(vUv.x + step.x, vUv.y 		   );
 	vec2 brv = vec2(vUv.x + step.x, vUv.y - step.y);
-	tlv = vec2(tlv.x >= 0.0 ? tlv.x : (1.0 + tlv.x), 	tlv.y >= 0.0	? tlv.y : (1.0  + tlv.y));
-	tlv = vec2(tlv.x < 1.0  ? tlv.x : (tlv.x - 1.0 ), 	tlv.y < 1.0   	? tlv.y : (tlv.y - 1.0 ));
-	lv  = vec2( lv.x >= 0.0 ?  lv.x : (1.0 + lv.x),  	lv.y  >= 0.0 	?  lv.y : (1.0  +  lv.y));
-	lv  = vec2( lv.x < 1.0  ?  lv.x : ( lv.x - 1.0 ),   lv.y  < 1.0  	?  lv.y : ( lv.y - 1.0 ));
-	blv = vec2(blv.x >= 0.0 ? blv.x : (1.0 + blv.x), 	blv.y >= 0.0 	? blv.y : (1.0  + blv.y));
-	blv = vec2(blv.x < 1.0  ? blv.x : (blv.x - 1.0 ), 	blv.y < 1.0 	? blv.y : (blv.y - 1.0 ));
-	tv  = vec2( tv.x >= 0.0 ?  tv.x : (1.0 + tv.x),  	tv.y  >= 0.0 	?  tv.y : (1.0  +  tv.y));
-	tv  = vec2( tv.x < 1.0  ?  tv.x : ( tv.x - 1.0 ),   tv.y  < 1.0 	?  tv.y : ( tv.y - 1.0 ));
-	bv  = vec2( bv.x >= 0.0 ?  bv.x : (1.0 + bv.x),  	bv.y  >= 0.0 	?  bv.y : (1.0  +  bv.y));
-	bv  = vec2( bv.x < 1.0  ?  bv.x : ( bv.x - 1.0 ),   bv.y  < 1.0 	?  bv.y : ( bv.y - 1.0 ));
-	trv = vec2(trv.x >= 0.0 ? trv.x : (1.0 + trv.x), 	trv.y >= 0.0 	? trv.y : (1.0  + trv.y));
-	trv = vec2(trv.x < 1.0  ? trv.x : (trv.x - 1.0 ), 	trv.y < 1.0   	? trv.y : (trv.y - 1.0 ));
-	rv  = vec2( rv.x >= 0.0 ?  rv.x : (1.0 + rv.x),  	rv.y  >= 0.0 	?  rv.y : (1.0  +  rv.y));
-	rv  = vec2( rv.x < 1.0  ?  rv.x : ( rv.x - 1.0 ),   rv.y  < 1.0   	?  rv.y : ( rv.y - 1.0 ));
-	brv = vec2(brv.x >= 0.0 ? brv.x : (1.0 + brv.x), 	brv.y >= 0.0 	? brv.y : (1.0  + brv.y));
-	brv = vec2(brv.x < 1.0  ? brv.x : (brv.x - 1.0 ), 	brv.y < 1.0   	? brv.y : (brv.y - 1.0 ));
 	float tl = abs(texture2D(tHeightMap, tlv).r);
 	float l  = abs(texture2D(tHeightMap, lv ).r);
 	float bl = abs(texture2D(tHeightMap, blv).r);
@@ -405,11 +448,16 @@ void main()
 
 </script>
 
-<script>
+<script type="module">
 
 // https://www.shadertoy.com/view/4st3R7
 
-'use strict';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { ShaderTexture } from '../src/THREE.ShaderTexture.js';
+
+// the shaders work in display colors, as three.js did in 2016
+THREE.ColorManagement.enabled = false;
 
 var container, renderer, camera, controls, scene;
 var torus, textures;
@@ -429,13 +477,15 @@ function addRandomLight( intensity ) {
 	var x = Math.random() * 2 - 1
 	var z = Math.random() * 2 - 1
 
-	var light = new THREE.SpotLight( 0xffffff, intensity, 0, 1, .5, .5 );
+	var light = new THREE.SpotLight( 0xffffff, intensity * Math.PI, 0, 1, .5, 0 );
 	light.position.set( x, 15, 2 + z );
 	light.target.position.set( 0, 0, 0 );
 
 	light.castShadow = true;
 
-	light.shadow = new THREE.LightShadow( new THREE.PerspectiveCamera( 15, 1, 12, 25 ) );
+	light.shadow.camera.near = 12;
+	light.shadow.camera.far = 25;
+	light.shadow.focus = .13;
 	light.shadow.bias = 0.001;
 
 	light.shadow.mapSize.width = SHADOW_MAP_WIDTH;
@@ -447,10 +497,10 @@ function addRandomLight( intensity ) {
 
 function initScene() {
 
-	var light = new THREE.AmbientLight( 0x101010 );
+	var light = new THREE.AmbientLight( 0x101010, Math.PI );
 	scene.add( light );
 
-	var light = new THREE.HemisphereLight( 0xffffff, 0x000000, .5 );
+	var light = new THREE.HemisphereLight( 0xffffff, 0x000000, .5 * Math.PI );
 	scene.add( light );
 
 	if( mobile ) {
@@ -475,10 +525,11 @@ function initScene() {
 	textures.bumpTexture.wrapS = textures.bumpTexture.wrapT = THREE.RepeatWrapping;
 
 	torus = new THREE.Mesh(
-		new THREE.TorusKnotBufferGeometry( 1, .3, 200, 32 ),
+		new THREE.TorusKnotGeometry( 1, .3, 200, 32 ),
 		new THREE.MeshStandardMaterial({
 			map: textures.diffuseTexture,
 			roughness: .5,
+			metalness: .5,
 			roughnessMap: textures.roughnessTexture,
 			bumpMap: textures.bumpTexture,
 			bumpScale: .1,
@@ -503,7 +554,9 @@ function generateTextures( width, height ) {
 		uniforms:{
 			type: { type: 'f', value: 0 },
 			dimensions: { type: 'v2', value: new THREE.Vector2( width, height ) },
-			seed: { type: 'f', value: Math.random() * performance.now() }
+			seed: { type: 'f', value: Math.random() * performance.now() },
+			time: { type: 'f', value: 0 },
+			params: { type: 'v2', value: new THREE.Vector2() }
 		},
 		vertexShader: document.getElementById( 'ortho-vs' ).textContent,
 		fragmentShader: document.getElementById( 'texture-fs' ).textContent
@@ -516,7 +569,9 @@ function generateTextures( width, height ) {
 		uniforms:{
 			type: { type: 'f', value: 1 },
 			dimensions: { type: 'v2', value: new THREE.Vector2( width, height ) },
-			seed: { type: 'f', value: Math.random() * performance.now() }
+			seed: { type: 'f', value: Math.random() * performance.now() },
+			time: { type: 'f', value: 0 },
+			params: { type: 'v2', value: new THREE.Vector2() }
 		},
 		vertexShader: document.getElementById( 'ortho-vs' ).textContent,
 		fragmentShader: document.getElementById( 'texture-fs' ).textContent
@@ -559,7 +614,9 @@ function generateTextures( width, height ) {
 		uniforms:{
 			type: { type: 'f', value: 2 },
 			dimensions: { type: 'v2', value: new THREE.Vector2( width, height ) },
-			seed: { type: 'f', value: Math.random() * performance.now() }
+			seed: { type: 'f', value: Math.random() * performance.now() },
+			time: { type: 'f', value: 0 },
+			params: { type: 'v2', value: new THREE.Vector2() }
 		},
 		vertexShader: document.getElementById( 'ortho-vs' ).textContent,
 		fragmentShader: document.getElementById( 'texture-fs' ).textContent
@@ -569,12 +626,127 @@ function generateTextures( width, height ) {
 	roughnessTexture.render();
 
 	return {
+		list: [
+			{ label: 'map', shaderTexture: diffuseTexture, hint: 'hue, softness', start: [ .5, .29 ],
+				drag: function( x, y ) { diffuseShader.uniforms.params.value.set( x, y ); } },
+			{ label: 'bumpMap', shaderTexture: bumpTexture, hint: 'detail, depth', start: [ 0, .25 ],
+				drag: function( x, y ) { bumpShader.uniforms.params.value.set( x, y ); } },
+			{ label: 'normals', shaderTexture: normalTexture, hint: 'strength, in or out', start: [ .77, 1 ],
+				drag: function( x, y ) { normalShader.uniforms.dz.value = 40 - 39 * x; normalShader.uniforms.invertH.value = 1 - 2 * y; } },
+			{ label: 'normalMap, blurred', shaderTexture: blurNormalTexture, hint: 'blur', start: [ .19, .5 ],
+				drag: function( x, y ) { blurNormalShader.uniforms.sigma.value = .3 + 3.7 * x; } },
+			{ label: 'roughnessMap', shaderTexture: roughnessTexture, hint: 'level, stripes', start: [ 1, .5 ],
+				drag: function( x, y ) { roughnessShader.uniforms.params.value.set( x, y ); } },
+		],
 		diffuseTexture: diffuseTexture.texture,
 		bumpTexture: bumpTexture.texture,
 		roughnessTexture: roughnessTexture.texture,
 		normalTexture: blurNormalTexture.texture,
 		refresh: refreshTextures
 	}
+
+}
+
+var previewScene = new THREE.Scene();
+var previewCamera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, - 1, 1 );
+var previewQuad = new THREE.Mesh( new THREE.PlaneGeometry( 2, 2 ), new THREE.MeshBasicMaterial() );
+previewScene.add( previewQuad );
+
+var PREVIEW = 128, MARGIN = 12;
+
+function addLabels() {
+
+	textures.list.forEach( function( item, i ) {
+
+		var label = document.createElement( 'div' );
+		label.className = 'label';
+		label.textContent = item.label;
+		label.title = 'drag: ' + item.hint;
+		label.style.left = ( MARGIN + i * ( PREVIEW + MARGIN ) ) + 'px';
+		document.body.appendChild( label );
+
+		var preview = document.createElement( 'div' );
+		preview.className = 'preview';
+		preview.title = 'drag: ' + item.hint;
+		preview.style.left = label.style.left;
+		var marker = document.createElement( 'div' );
+		preview.appendChild( marker );
+		document.body.appendChild( preview );
+
+		function set( x, y ) {
+
+			x = Math.min( 1, Math.max( 0, x ) );
+			y = Math.min( 1, Math.max( 0, y ) );
+			marker.style.left = ( x * PREVIEW ) + 'px';
+			marker.style.top = ( ( 1 - y ) * PREVIEW ) + 'px';
+			item.drag( x, y );
+
+		}
+
+		var dragging = false;
+
+		function onPointer( e ) {
+
+			if( e.type === 'pointerdown' ) {
+
+				dragging = true;
+				preview.setPointerCapture( e.pointerId );
+
+			}
+
+			if( !dragging ) return;
+			var rect = preview.getBoundingClientRect();
+			set( ( e.clientX - rect.left ) / rect.width, 1 - ( e.clientY - rect.top ) / rect.height );
+
+		}
+
+		function onRelease() {
+
+			dragging = false;
+
+		}
+
+		preview.addEventListener( 'pointerdown', onPointer );
+		preview.addEventListener( 'pointermove', onPointer );
+		preview.addEventListener( 'pointerup', onRelease );
+		preview.addEventListener( 'pointercancel', onRelease );
+
+		set( item.start[ 0 ], item.start[ 1 ] );
+
+	} );
+
+}
+
+function updateTextures() {
+
+	var time = .00002 * performance.now();
+
+	textures.list.forEach( function( item ) {
+
+		var uniforms = item.shaderTexture.shader.uniforms;
+		if( uniforms.time ) uniforms.time.value = time;
+		item.shaderTexture.render();
+
+	} );
+
+}
+
+function drawPreviews() {
+
+	renderer.setScissorTest( true );
+
+	textures.list.forEach( function( item, i ) {
+
+		var x = MARGIN + i * ( PREVIEW + MARGIN );
+		renderer.setViewport( x, MARGIN, PREVIEW, PREVIEW );
+		renderer.setScissor( x, MARGIN, PREVIEW, PREVIEW );
+		previewQuad.material.map = item.shaderTexture.texture;
+		renderer.render( previewScene, previewCamera );
+
+	} );
+
+	renderer.setScissorTest( false );
+	renderer.setViewport( 0, 0, container.clientWidth, container.clientHeight );
 
 }
 
@@ -603,6 +775,7 @@ function init() {
 	scene.add( camera );
 
 	renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
+	renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
 	renderer.setPixelRatio( window.devicePixelRatio );
 	renderer.setClearColor( 0xbfae98, 1 );
 	container.appendChild( renderer.domElement );
@@ -612,9 +785,10 @@ function init() {
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = THREE.PCFShadowMap;
 
-	controls = new THREE.OrbitControls( camera, renderer.domElement );
+	controls = new OrbitControls( camera, renderer.domElement );
 
 	initScene();
+	addLabels();
 	onWindowResized();
 
 	window.addEventListener( 'resize', onWindowResized );
@@ -649,10 +823,13 @@ function animate() {
 	requestAnimationFrame( animate );
 
 	controls.update();
+	updateTextures();
 	//torus.rotation.x += .01;
 	//torus.rotation.y += .001;
 
 	renderer.render( scene, camera );
+
+	drawPreviews();
 
 }
 
