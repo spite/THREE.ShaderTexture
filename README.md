@@ -1,6 +1,8 @@
 # THREE.ShaderTexture
 ShaderTexture, a helper to use procedurally generated texture
 
+[![npm](https://img.shields.io/npm/v/three.shader-texture.svg)](https://www.npmjs.com/package/three.shader-texture)
+
 #### Demos ####
 - **[Procedural textures on a torus knot](https://spite.github.io/THREE.ShaderTexture/examples/index.html)**: every map of the material is drawn by a shader, drag on a texture to change it
 - **[The same with a glow pass](https://spite.github.io/THREE.ShaderTexture/examples/index-post.html)**: adds a glow texture and postprocessing
